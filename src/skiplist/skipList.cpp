@@ -265,13 +265,58 @@ SkipListIterator SkipList::end() {
 // 返回第一个前缀匹配或者大于前缀的迭代器
 SkipListIterator SkipList::begin_preffix(const std::string &preffix) {
   // TODO: Lab1.3 任务：实现前缀查询的起始位置
-  return SkipListIterator{};
+  auto current=head;
+      // 从最高层开始向下搜索
+  for (int i = current_level - 1; i >= 0; i--)
+   {
+    // 在当前层向右移动，直到找到大于等于目标key的节点或到达末尾
+    while (current->forward_[i] && current->forward_[i]->key_ < preffix)
+     {
+      current = current->forward_[i];
+    }
+  }
+  // 移动到最底层的下一个节点
+  current = current->forward_[0];
+  // 检查前缀是否匹配
+  if (current && current->key_ == preffix) 
+  {
+      spdlog::trace("SkipList--begin_preffix('{}'): first match at '{}'", preffix,
+                  current->key_);
+  }
+
+    return SkipListIterator(current);
 }
 
 // 找到前缀的终结位置
 SkipListIterator SkipList::end_preffix(const std::string &prefix) {
   // TODO: Lab1.3 任务：实现前缀查询的终结位置
-  return SkipListIterator{};
+    auto current=head;
+      // 从最高层开始向下搜索
+  for (int i = current_level - 1; i >= 0; i--)
+   {
+    // 在当前层向右移动，直到找到大于等于目标key的节点或到达末尾
+    while (current->forward_[i] && current->forward_[i]->key_ < prefix)
+     {
+      current = current->forward_[i];
+    }
+  }
+  // 移动到最底层的下一个节点
+  current = current->forward_[0];
+  // 2. 继续向后查找，直到找到第一个不匹配 prefix 的节点
+    while ( current && current->key_.substr(0, prefix.size() )== prefix) 
+    {
+        current = current->forward_[0];
+    }
+// 此时 current 是第一个不匹配 prefix 的节点（即 end_prefix）
+    if (current) 
+    {
+        spdlog::trace("SkipList--end_prefix('{}'): ends at '{}'", prefix, current->key_);
+    } else {
+        spdlog::trace("SkipList--end_prefix('{}'): ends at end()", prefix);
+    }
+  
+
+    return SkipListIterator(current);
 }
 
 // ? 这里单调谓词的含义是, 整个数据库只会有一段连续区间满足此谓词
@@ -284,11 +329,73 @@ SkipListIterator SkipList::end_preffix(const std::string &prefix) {
 // ?   >0: 不满足谓词, 需要向右移动
 // ?   <0: 不满足谓词, 需要向左移动
 // ! Skiplist 中的谓词查询不会进行事务id的判断, 需要上层自己进行判断
+
 std::optional<std::pair<SkipListIterator, SkipListIterator>>
 SkipList::iters_monotony_predicate(
     std::function<int(const std::string &)> predicate) {
-  // TODO: Lab1.3 任务：实现谓词查询的起始位置
-  return std::nullopt;
+    
+  // 第一步：找到第一个满足谓词的节点
+  auto current = head;
+  
+  // 使用跳表的层级结构来快速定位
+  for (int level = current_level - 1; level >= 0; level--) {
+    while (current->forward_[level]) {
+      int result = predicate(current->forward_[level]->key_);
+      
+      if (result == 0) {
+        // 找到满足谓词的节点，但可能不是第一个，继续检查左边是否有也满足的
+        break;
+      } else if (result < 0) {
+        // 需要向左移动（当前节点太大），停止在这一层的搜索
+        break;
+      } else {
+        // 需要向右移动（当前节点太小）
+        current = current->forward_[level];
+      }
+    }
+  }
+  
+  // 在最底层精确查找第一个满足谓词的节点
+  while (current->forward_[0]) {
+    int result = predicate(current->forward_[0]->key_);
+    if (result == 0) {
+      // 找到第一个满足谓词的节点
+      break;
+    } else if (result < 0) {
+      // 需要向左移动，说明不存在满足谓词的节点
+      return std::nullopt;
+    } else {
+      // 需要向右移动
+      current = current->forward_[0];
+    }
+  }
+  
+  // 检查是否找到了满足谓词的节点
+  if (!current->forward_[0]) {
+    return std::nullopt;
+  }
+  
+  // first_match 是第一个满足谓词的节点
+  auto first_match = current->forward_[0];
+  
+  // 第二步：找到最后一个满足谓词的节点
+  auto last_match = first_match;
+  while (last_match->forward_[0]) {
+    int result = predicate(last_match->forward_[0]->key_);
+    if (result == 0) {
+      // 继续向右寻找
+      last_match = last_match->forward_[0];
+    } else {
+      // 不再满足谓词，last_match 就是最后一个满足谓词的节点
+      break;
+    }
+  }
+  
+  // 返回 [begin_iter, end_iter) 迭代器对
+  SkipListIterator begin_iter(first_match);
+  SkipListIterator end_iter(last_match->forward_[0]); // 指向下一个节点（开区间）
+  
+  return std::make_pair(begin_iter, end_iter);
 }
 
 // ? 打印跳表, 你可以在出错时调用此函数进行调试
