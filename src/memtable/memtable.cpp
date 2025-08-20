@@ -330,11 +330,36 @@ size_t MemTable::get_total_size() {
 
 HeapIterator MemTable::begin(uint64_t tranc_id) {
   // TODO Lab 2.2 MemTable 的迭代器
-  return {};
+  std::shared_lock<std::shared_mutex> slock1(cur_mtx);
+  std::shared_lock<std::shared_mutex> slock2(frozen_mtx);
+   std::vector<SearchItem> item_vec;
+  
+  // 添加当前活跃表的迭代器
+  for (auto iter = current_table->begin(); iter != current_table->end();++iter) {
+     item_vec.emplace_back(iter.get_key(), iter.get_value(), 0, 0,
+                          iter.get_tranc_id());
+  }
+  // 添加所有冻结表的迭代器
+   int table_idx = 1;
+  for (auto ft = frozen_tables.begin(); ft != frozen_tables.end(); ft++) {
+    auto table = *ft;
+    for (auto iter = table->begin(); iter != table->end(); ++iter) {
+      if (tranc_id != 0 && iter.get_tranc_id() > tranc_id) {
+        continue;
+      }
+      item_vec.emplace_back(iter.get_key(), iter.get_value(), table_idx, 0,
+                            iter.get_tranc_id());
+    }
+    table_idx++;
+  }
+  // 创建并返回堆迭代器
+  return HeapIterator(item_vec, tranc_id);
 }
 
 HeapIterator MemTable::end() {
   // TODO Lab 2.2 MemTable 的迭代器
+  std::shared_lock<std::shared_mutex> slock1(cur_mtx);
+  std::shared_lock<std::shared_mutex> slock2(frozen_mtx);
   return HeapIterator{};
 }
 
