@@ -90,10 +90,7 @@ void SkipList::put(const std::string &key, const std::string &value,
                    uint64_t tranc_id) {
   spdlog::trace("SkipList--put({}, {}, {})", key, value, tranc_id);
   // TODO: Lab1.1  任务：实现插入或更新键值对
-     if(value.empty())//如果值为空，抛出异常
-     {
-     throw std::runtime_error("value is empty");
-     }
+
   // ? Hint: 你需要保证不同`Level`的步长从底层到高层逐渐增加
   auto current=head;
  std::vector<std::shared_ptr<SkipListNode>> update(max_level, nullptr);
@@ -263,14 +260,14 @@ SkipListIterator SkipList::end() {
 
 // 找到前缀的起始位置
 // 返回第一个前缀匹配或者大于前缀的迭代器
-SkipListIterator SkipList::begin_preffix(const std::string &preffix) {
+SkipListIterator SkipList::begin_preffix(const std::string &prefix) {
   // TODO: Lab1.3 任务：实现前缀查询的起始位置
   auto current=head;
       // 从最高层开始向下搜索
   for (int i = current_level - 1; i >= 0; i--)
    {
     // 在当前层向右移动，直到找到大于等于目标key的节点或到达末尾
-    while (current->forward_[i] && current->forward_[i]->key_ < preffix)
+    while (current->forward_[i] && current->forward_[i]->key_ < prefix)
      {
       current = current->forward_[i];
     }
@@ -278,9 +275,9 @@ SkipListIterator SkipList::begin_preffix(const std::string &preffix) {
   // 移动到最底层的下一个节点
   current = current->forward_[0];
   // 检查前缀是否匹配
-  if (current && current->key_ == preffix) 
+  if (current && current->key_.compare(0, prefix.size(), prefix) == 0) 
   {
-      spdlog::trace("SkipList--begin_preffix('{}'): first match at '{}'", preffix,
+      spdlog::trace("SkipList--begin_preffix('{}'): first match at '{}'", prefix,
                   current->key_);
   }
 
@@ -303,7 +300,7 @@ SkipListIterator SkipList::end_preffix(const std::string &prefix) {
   // 移动到最底层的下一个节点
   current = current->forward_[0];
   // 2. 继续向后查找，直到找到第一个不匹配 prefix 的节点
-    while ( current && current->key_.substr(0, prefix.size() )== prefix) 
+    while ( current && current->key_.compare(0, prefix.size(), prefix) == 0) 
     {
         current = current->forward_[0];
     }
