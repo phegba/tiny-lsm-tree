@@ -344,11 +344,8 @@ HeapIterator MemTable::begin(uint64_t tranc_id) {
   for (auto ft = frozen_tables.begin(); ft != frozen_tables.end(); ft++) {
     auto table = *ft;
     for (auto iter = table->begin(); iter != table->end(); ++iter) {
-      if (tranc_id != 0 && iter.get_tranc_id() > tranc_id) {
-        continue;
-      }
-      item_vec.emplace_back(iter.get_key(), iter.get_value(), table_idx, 0,
-                            iter.get_tranc_id());
+
+      item_vec.emplace_back(iter.get_key(), iter.get_value(), table_idx, 0,iter.get_tranc_id());
     }
     table_idx++;
   }
@@ -367,14 +364,62 @@ HeapIterator MemTable::iters_preffix(const std::string &preffix,
                                      uint64_t tranc_id) {
 
   // TODO Lab 2.3 MemTable 的前缀迭代器
+ std::shared_lock<std::shared_mutex> slock1(cur_mtx);
+ std::shared_lock<std::shared_mutex> slock2(frozen_mtx);
+ std::vector<SearchItem> item_vec;
+ //活跃表
+  for(auto iter = current_table->begin_preffix(preffix); iter != current_table->end_preffix(preffix);++iter)
+  {
+     item_vec.emplace_back(iter.get_key(), iter.get_value(), 0, 0,iter.get_tranc_id());
+  }
+  int table_idx = 1;
+  //冻结表
+   for (auto ft = frozen_tables.begin(); ft != frozen_tables.end(); ft++) 
+  {
+     auto table = *ft;
+      for (auto iter = table->begin_preffix(preffix);iter != table->end_preffix(preffix); ++iter)
+      {
+      item_vec.emplace_back(iter.get_key(), iter.get_value(), table_idx, 0,iter.get_tranc_id());
+      }
+      table_idx++;
 
-  return {};
+    }
+   return HeapIterator(item_vec, tranc_id);
 }
 
 std::optional<std::pair<HeapIterator, HeapIterator>>
 MemTable::iters_monotony_predicate(
-    uint64_t tranc_id, std::function<int(const std::string &)> predicate) {
+    uint64_t tranc_id, std::function<int(const std::string &)> predicate) 
+    {
   // TODO Lab 2.3 MemTable 的谓词查询迭代器起始范围
-  return std::nullopt;
+    std::shared_lock<std::shared_mutex> slock1(cur_mtx);
+   std::shared_lock<std::shared_mutex> slock2(frozen_mtx);
+   std::vector<SearchItem> item_vec;
+   auto cur_result = current_table->iters_monotony_predicate(predicate);
+   if (cur_result.has_value()) 
+   {
+    auto [begin, end] = cur_result.value();
+    for (auto iter = begin; iter != end; ++iter) 
+    {
+      item_vec.emplace_back(iter.get_key(), iter.get_value(), 0, 0,iter.get_tranc_id());
+    }
+
+  }
+  int table_idx = 1;
+  for (auto ft = frozen_tables.begin(); ft != frozen_tables.end(); ft++) 
+  {
+    auto table = *ft;
+    auto result = table->iters_monotony_predicate(predicate);
+    if (result.has_value()) 
+    {
+      auto [begin, end] = result.value();
+      for (auto iter = begin; iter != end; ++iter) 
+      {
+        item_vec.emplace_back(iter.get_key(), iter.get_value(), table_idx, 0, iter.get_tranc_id());
+      }
+    }
+    table_idx++;
+  }
+   return std::make_pair(HeapIterator(item_vec, tranc_id), HeapIterator{});
 }
 } // namespace tiny_lsm
